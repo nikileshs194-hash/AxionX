@@ -6,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from routes.weather  import router as weather_router
 from routes.alerts   import router as alerts_router
-from routes.chat     import router as chat_router
 from routes.sos      import router as sos_router
 from routes.predict  import router as predict_router
 from routes.auth     import router as auth_router
@@ -45,7 +44,6 @@ app.add_middleware(
 
 app.include_router(weather_router)
 app.include_router(alerts_router)
-app.include_router(chat_router)
 app.include_router(sos_router)
 app.include_router(predict_router)
 app.include_router(auth_router)
@@ -60,7 +58,6 @@ def home():
         "endpoints": {
             "weather": "GET /api/weather?lat=&lon=",
             "alerts":  "GET /api/alerts?lat=&lon=",
-            "chat":    "POST /api/chat",
             "sos":     "POST /api/sos",
             "shelters":"GET /api/sos/shelters?lat=&lon=",
             "predict": "GET /predict?lat=&lon=",

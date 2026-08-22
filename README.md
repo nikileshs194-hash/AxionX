@@ -46,7 +46,6 @@ JeevanSetu is a disaster-preparedness system built for real-world deployment in 
 The system integrates:
 - **ML flood prediction model** — trained on Open-Meteo + OSM terrain/drainage data
 - **Live external APIs** — Open-Meteo, OpenWeatherMap
-- **Groq LLM + Whisper** — voice-enabled AI assistance
 - **Supabase** — real-time PostgreSQL database and user store
 - **SMS OTP authentication** via 2Factor.in
 - **Expo push notifications** — foreground and background alerts for all hazard types
@@ -59,7 +58,7 @@ The system integrates:
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         MOBILE APP (Expo)                           │
-│  Auth Flow → Weather/Home → Alerts → AI Chat                        │
+│  Auth Flow → Weather/Home → Alerts                                  │
 │  Push Notification Modals: Flood · SOS                              │
 │  Background Location Task (persists across app restarts)            │
 └────────────────────────────┬────────────────────────────────────────┘
@@ -67,10 +66,10 @@ The system integrates:
                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        FASTAPI BACKEND                              │
-│  /api/weather   /api/alerts   /api/chat    /api/sos                 │
+│  /api/weather   /api/alerts   /api/sos                              │
 │  /api/auth      /predict      /admin/*                              │
 │                                                                     │
-│  Services: weather · alert · risk · AI · auth · SMS · scheduler     │
+│  Services: weather · alert · risk · auth · SMS · scheduler          │
 └──────┬──────────────┬──────────────┬────────────────────────────────┘
        │              │              │
        ▼              ▼              ▼
@@ -78,7 +77,7 @@ The system integrates:
   PostgreSQL      Open-Meteo      model.pkl (flood)
   (users, sos,    OpenWeather
    alerts,        Expo Push API
-   shelters)      Groq (LLM)
+   shelters)
 ```
 
 ---
@@ -115,13 +114,6 @@ Both hazard modals are full-screen bottom sheets that appear automatically when 
 - 7-day daily forecast with high/low temperatures
 - Multi-source fusion (OWM + Open-Meteo) for reliability
 
-### AI Chat Assistant
-- Natural language Q&A via Groq `llama-3.3-70b-versatile`
-- Location-aware context injection (lat/lon with every message)
-- Voice input via Groq Whisper transcription
-- Conversation history (last 10 messages) for multi-turn dialogue
-- Follow-up suggestion chips updated by the model
-
 ### Authentication
 - Phone-based OTP login (no passwords)
 - SMS delivery via 2Factor.in API
@@ -150,7 +142,6 @@ flood-ai-system/
 │   ├── routes/
 │   │   ├── weather.py               # GET /api/weather
 │   │   ├── alerts.py                # GET /api/alerts, save, list, delete
-│   │   ├── chat.py                  # POST /api/chat + /api/chat/transcribe
 │   │   ├── sos.py                   # SOS dispatch, nearby notify, shelters
 │   │   ├── predict.py               # GET /predict  (flood ML model)
 │   │   ├── auth.py                  # OTP send/verify, profile, location
@@ -160,7 +151,6 @@ flood-ai-system/
 │   │   ├── weather_service.py       # OWM + Open-Meteo fusion
 │   │   ├── alert_service.py         # Alert engine (multi-source)
 │   │   ├── risk_service.py          # Weather risk score
-│   │   ├── ai_service.py            # Groq LLM integration
 │   │   ├── auth_service.py          # OTP logic, user CRUD
 │   │   ├── sms_service.py           # 2Factor.in SMS delivery
 │   │   ├── supabase_service.py      # DB client, shelter queries
@@ -178,11 +168,10 @@ flood-ai-system/
 │   │   │
 │   │   ├── (tabs)/
 │   │   │   ├── index.tsx            # Home: weather, flood prediction, SOS
-│   │   │   ├── alerts.tsx           # Real-time alerts with offline cache
-│   │   │   └── ai.tsx               # AI chat + voice input
+│   │   │   └── alerts.tsx           # Real-time alerts with offline cache
 │   │   │
 │   │   └── _layout.tsx              # Root layout: AuthProvider, push token
-│   │                                #   registration, all 4 alert modals
+│   │                                #   registration, both alert modals
 │   │
 │   ├── components/
 │   │   ├── SOSAlertModal.tsx        # Incoming SOS notification modal (red)
@@ -227,8 +216,6 @@ flood-ai-system/
 | Language (backend) | Python | 3.11+ |
 | Flood ML Model | VotingEnsemble (XGBoost + GBM + RF) | XGBoost 3.2, scikit-learn 1.8 |
 | Database | Supabase (PostgreSQL) | — |
-| AI / LLM | Groq (llama-3.3-70b) | — |
-| Voice STT | Groq Whisper | — |
 | Weather APIs | OpenWeatherMap, Open-Meteo | — |
 | SMS | 2Factor.in | — |
 | Storage (mobile) | AsyncStorage | 2.x |
@@ -268,13 +255,6 @@ flood-ai-system/
 | `POST` | `/api/alerts/save` | Save alert to user list |
 | `GET` | `/api/alerts/saved?phone=` | Fetch saved alerts |
 | `DELETE` | `/api/alerts/clear` | Delete a saved alert |
-
-### Chat / AI
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/chat` | LLM chat response + follow-up suggestions |
-| `POST` | `/api/chat/transcribe` | Groq Whisper audio → text |
 
 ### SOS & Emergency
 
@@ -574,11 +554,8 @@ Create `backend/.env`:
 # Weather
 OPENWEATHER_API_KEY=your_openweathermap_api_key
 
-# AI (Groq)  — https://console.groq.com  (free tier)
+# AI alert personalisation (Groq, optional) — https://console.groq.com (free tier)
 GROQ_API_KEY=your_groq_api_key
-
-# AI (Google Gemini optional fallback)
-GEMINI_API_KEY=your_gemini_api_key
 
 # Database (Supabase)
 SUPABASE_URL=https://your-project.supabase.co
@@ -594,8 +571,7 @@ TWOFACTOR_KEY=your_2factor_api_key
 | Key | Where to Get |
 |-----|-------------|
 | `OPENWEATHER_API_KEY` | openweathermap.org/api — Free tier: 1,000 calls/day |
-| `GROQ_API_KEY` | console.groq.com — Free tier |
-| `GEMINI_API_KEY` | aistudio.google.com — Free tier |
+| `GROQ_API_KEY` | console.groq.com — Free tier (optional, used for alert personalisation) |
 | `SUPABASE_URL/KEY` | Supabase project → Settings → API |
 | `SUPABASE_SERVICE_KEY` | Supabase project → Settings → API → service_role |
 | `TWOFACTOR_KEY` | 2factor.in — Indian SMS OTP service |
@@ -620,7 +596,6 @@ No key needed for: Open-Meteo (free/public), or Expo Push.
 |--------|-------------|
 | **Home (Weather)** | Deep blue gradient weather card, 6-metric pill layout, 24h hourly scroll, 7-day forecast, flood prediction card, pulsing SOS button |
 | **Alerts** | Staggered card entrance animation, severity strip, offline banner when cached |
-| **AI Chat** | Gradient hero, suggestion cards, premium chat bubbles, animated typing indicator, voice input overlay |
 
 ### Alert Modals
 

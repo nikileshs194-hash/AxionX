@@ -81,13 +81,7 @@
           "locationAlwaysPermission": "JeevanSetu tracks your location in the background so rescue teams can find you."
         }
       ],
-      "expo-task-manager",
-      [
-        "expo-av",
-        {
-          "microphonePermission": "JeevanSetu needs microphone access to let you ask questions by voice."
-        }
-      ]
+      "expo-task-manager"
     ],
     "updates": {
       "enabled": false,

@@ -62,10 +62,6 @@ export interface AlertsResponse {
   alerts: AlertItem[]; source: string; count: number;
 }
 
-export interface ChatResponse {
-  response: string; suggestions: string[];
-}
-
 export const fetchWeather = async (lat: number, lon: number): Promise<WeatherResponse> => {
   const res = await api.get('/api/weather', { params: { lat, lon } });
   return res.data;
@@ -74,39 +70,6 @@ export const fetchWeather = async (lat: number, lon: number): Promise<WeatherRes
 export const fetchAlerts = async (lat: number, lon: number): Promise<AlertsResponse> => {
   const res = await api.get('/api/alerts', { params: { lat, lon } });
   return res.data;
-};
-
-export interface ChatHistoryMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  time: string;
-}
-
-export interface ChatHistoryResponse {
-  phone: string;
-  date: string;
-  messages: ChatHistoryMessage[];
-  count: number;
-}
-
-export const sendChatMessage = async (
-  message: string,
-  history: { role: string; content: string }[],
-  lat?: number,
-  lon?: number,
-  phone?: string,
-): Promise<ChatResponse> => {
-  const res = await api.post('/api/chat', { message, history, lat, lon, phone }, { timeout: 30000 });
-  return res.data;
-};
-
-export const fetchChatHistory = async (phone: string): Promise<ChatHistoryResponse> => {
-  const res = await api.get('/api/chat/history', { params: { phone } });
-  return res.data;
-};
-
-export const clearChatHistory = async (phone: string): Promise<void> => {
-  await api.delete('/api/chat/history', { params: { phone } });
 };
 
 // ── Emergency / SOS ──────────────────────────────────────────────────────────
@@ -227,46 +190,4 @@ export const getSavedAlerts = async (phone: string): Promise<{ alerts: AlertItem
 /** Delete one alert (db_id provided) or ALL alerts for user (no db_id) */
 export const clearAlert = async (phone: string, db_id?: string): Promise<void> => {
   await api.delete('/api/alerts/clear', { params: db_id ? { phone, db_id } : { phone } });
-};
-
-// ── Voice transcription ───────────────────────────────────────────────────────
-
-/**
- * Send a recorded audio file to the backend Groq Whisper endpoint.
- *
- * Uses multipart/form-data — the only approach React Native 0.73+ handles
- * reliably for local file:// URIs. RN's native networking reads the file from
- * disk and streams it as multipart without any extra libraries.
- */
-export const transcribeAudio = async (audioUri: string): Promise<string> => {
-  const filename = audioUri.split('/').pop() ?? 'recording.m4a';
-  const ext      = filename.split('.').pop()?.toLowerCase() ?? 'm4a';
-
-  // Map extension → MIME type that Groq Whisper accepts
-  const MIME_MAP: Record<string, string> = {
-    m4a: 'audio/m4a', mp4: 'audio/mp4', mp3: 'audio/mpeg',
-    wav: 'audio/wav', webm: 'audio/webm', ogg: 'audio/ogg',
-    flac: 'audio/flac', opus: 'audio/opus',
-  };
-  const mimeType = MIME_MAP[ext] ?? 'audio/m4a';
-
-  // FormData with { uri, type, name } — React Native reads the local file and
-  // sends it as multipart binary. This is the standard RN file-upload pattern.
-  const formData = new FormData();
-  formData.append('file', { uri: audioUri, type: mimeType, name: filename } as any);
-
-  const response = await fetch(`${BACKEND_URL}/api/chat/transcribe`, {
-    method:  'POST',
-    body:    formData,
-    // Do NOT set Content-Type manually — React Native adds the multipart
-    // boundary automatically when the body is FormData.
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Transcription failed (${response.status}): ${errText.slice(0, 120)}`);
-  }
-
-  const data = await response.json();
-  return (data.text ?? '').trim();
 };
