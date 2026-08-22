@@ -571,7 +571,7 @@ export default function DashboardScreen() {
           <View style={sosStyles.header}>
             <Ionicons name="call-outline" size={24} color={theme.primary} />
             <Text style={sosStyles.headerTitle}>Set Rescue Team Number</Text>
-            <Text style={sosStyles.headerSub}>This number will be dialled when you tap "Call Rescue Team"</Text>
+            <Text style={sosStyles.headerSub}>This number will be dialled when you tap &quot;Call Rescue Team&quot;</Text>
           </View>
           <TextInput
             style={{

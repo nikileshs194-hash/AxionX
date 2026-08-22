@@ -210,7 +210,7 @@ export default function VerifyScreen() {
               ) : (
                 <TouchableOpacity onPress={handleResend} activeOpacity={0.7}>
                   <Text style={styles.resendActive}>
-                    Didn't receive code?{' '}
+                    Didn&apos;t receive code?{' '}
                     <Text style={styles.resendLink}>Resend OTP</Text>
                   </Text>
                 </TouchableOpacity>

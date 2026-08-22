@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import L from "leaflet";
 
 // Fix default Leaflet marker icon in Next.js
-delete (L.Icon.Default.prototype as any)._getIconUrl;
+delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
@@ -191,7 +191,7 @@ export default function FloodMap() {
           fetch(`${BACKEND}/predict?lat=${lat}&lon=${lon}`).then((r) => r.json()),
         ]);
         if (floodRes.status === "fulfilled") setFlood(floodRes.value);
-      } catch (e: any) {
+      } catch {
         setError("Failed to load risk data — is the backend running?");
       } finally {
         setLoading(false);

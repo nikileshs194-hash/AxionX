@@ -94,43 +94,87 @@ def _save_alert_to_db(phone: str, alert: dict) -> None:
 
 # ── Shelter lookup ────────────────────────────────────────────────────────────
 
-def _get_nearest_shelter_osm(lat: float, lon: float) -> Optional[dict]:
-    """OSM Overpass fallback — finds nearest shelter/school within 3 km."""
-    import requests as _req
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> int:
     from math import radians, cos, sin, asin, sqrt
+    R    = 6371000
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a    = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    return int(2 * R * asin(sqrt(a)))
 
-    query = f"""
+
+# Progressively widen the search — most areas find something at 3-5km;
+# only sparsely-mapped/rural areas need to fall back further.
+_OSM_SEARCH_RADII_M = [3000, 10000, 20000]
+
+# Amenity/building tags that plausibly serve as an emergency gathering point.
+# Includes places of worship and government offices — common real-world
+# flood/cyclone shelter points in India that pure "amenity=shelter" misses.
+_OSM_SHELTER_TAGS = (
+    "shelter|community_centre|school|hospital|"
+    "place_of_worship|townhall|social_facility|clinic"
+)
+
+
+def _get_nearest_shelter_osm(lat: float, lon: float) -> Optional[dict]:
+    """
+    OSM Overpass fallback — searches progressively wider radii (3km → 10km →
+    20km) across a broad set of shelter-like tags, returning the closest
+    match found. Stops at the first radius that returns any results.
+    """
+    import requests as _req
+
+    for radius_m in _OSM_SEARCH_RADII_M:
+        query = f"""
 [out:json][timeout:15];
 (
-  node["amenity"~"shelter|community_centre|school|hospital"](around:3000,{lat},{lon});
-  way["amenity"~"shelter|community_centre|school|hospital"](around:3000,{lat},{lon});
+  node["amenity"~"{_OSM_SHELTER_TAGS}"](around:{radius_m},{lat},{lon});
+  way["amenity"~"{_OSM_SHELTER_TAGS}"](around:{radius_m},{lat},{lon});
+  node["office"="government"](around:{radius_m},{lat},{lon});
 );
-out center 5;
+out center 20;
 """
-    try:
-        r        = _req.post("https://overpass-api.de/api/interpreter",
-                             data={"data": query}, timeout=20)
-        elements = r.json().get("elements", [])
-        if not elements:
+        try:
+            r        = _req.post("https://overpass-api.de/api/interpreter",
+                                 data={"data": query}, timeout=8)
+            r.raise_for_status()
+            elements = r.json().get("elements", [])
+        except Exception as e:
+            # Connection/HTTP-level failure (host unreachable, timeout, bad
+            # response) — retrying a wider radius against the same dead
+            # endpoint won't help, so give up immediately instead of
+            # multiplying the wait for no benefit.
+            logger.warning(f"[Scheduler] OSM unreachable, aborting search: {e}")
             return None
-        el   = elements[0]
-        slat = el.get("lat") or el.get("center", {}).get("lat", lat)
-        slon = el.get("lon") or el.get("center", {}).get("lon", lon)
-        name = el.get("tags", {}).get("name", "Nearest Safe Location")
-        R    = 6371000
-        dlat = radians(slat - lat)
-        dlon = radians(slon - lon)
-        a    = sin(dlat/2)**2 + cos(radians(lat)) * cos(radians(slat)) * sin(dlon/2)**2
-        dist_m   = int(2 * R * asin(sqrt(a)))
-        dist_str = f"{dist_m/1000:.1f} km" if dist_m >= 1000 else f"{dist_m} m"
+
+        if not elements:
+            continue   # request succeeded but found nothing — try wider radius
+
+        # Pick the closest of the returned candidates, not just the first.
+        best = None
+        best_dist = None
+        for el in elements:
+            slat = el.get("lat") or el.get("center", {}).get("lat")
+            slon = el.get("lon") or el.get("center", {}).get("lon")
+            if slat is None or slon is None:
+                continue
+            dist_m = _haversine_m(lat, lon, slat, slon)
+            if best_dist is None or dist_m < best_dist:
+                best, best_dist = el, dist_m
+                best_lat, best_lon = slat, slon
+
+        if best is None:
+            continue
+
+        name     = best.get("tags", {}).get("name", "Nearest Safe Location")
+        dist_str = f"{best_dist/1000:.1f} km" if best_dist >= 1000 else f"{best_dist} m"
         return {
-            "name": name, "distance_m": dist_m, "distance_str": dist_str,
-            "lat": slat, "lon": slon,
-            "maps_url": f"https://www.google.com/maps/dir/?api=1&destination={slat},{slon}",
+            "name": name, "distance_m": best_dist, "distance_str": dist_str,
+            "lat": best_lat, "lon": best_lon,
+            "maps_url": f"https://www.google.com/maps/dir/?api=1&destination={best_lat},{best_lon}",
         }
-    except Exception as e:
-        logger.warning(f"[Scheduler] OSM shelter error: {e}")
-        return None
+
+    return None
 
 
 def _get_shelter_for_user(lat: float, lon: float) -> dict:
